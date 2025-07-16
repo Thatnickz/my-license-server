@@ -1,4 +1,4 @@
-# hwid_server.py (Version 3 - PermissionError Fix)
+# hwid_server.py (Final Version with Robust Startup)
 from flask import Flask, request, jsonify
 import sqlite3
 import os
@@ -8,13 +8,12 @@ DB_FILE = os.path.join("/var/data", "hwid_allowlist.db")
 ADMIN_SECRET_KEY = "change-this-to-a-very-long-and-random-password"
 
 def db_connection():
-    # --- THIS IS THE FIX ---
-    # The os.makedirs line has been removed.
-    # We trust that Render has created the /var/data directory for us.
-    # sqlite3.connect is smart enough to create the file inside the existing directory.
     return sqlite3.connect(DB_FILE)
 
 def setup_database():
+    # This function now safely creates the directory and the table.
+    print("Running initial database setup...")
+    os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
     conn = db_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -25,9 +24,22 @@ def setup_database():
     """)
     conn.commit()
     conn.close()
-    print("Database checked and ready.")
+    print("Database is ready.")
 
-# --- All other functions (/check, /add, /list, /deactivate) are unchanged ---
+# --- NEW, ROBUST STARTUP LOGIC ---
+@app.before_request
+def before_request_func():
+    # This code runs before EVERY request.
+    # We check if the database has been set up for this server instance yet.
+    # The 'g' object is a special Flask object that lasts for one request.
+    from flask import g
+    if not getattr(g, '_database_setup', False):
+        # If not set up, run the setup and mark it as done.
+        setup_database()
+        g._database_setup = True
+# --- END OF NEW LOGIC ---
+
+# --- All your API endpoints (/check, /add, /list, /deactivate) are unchanged ---
 
 @app.route('/check', methods=['POST'])
 def check_hwid():
@@ -76,5 +88,4 @@ def deactivate_hwid():
     conn.close()
     return jsonify({"status": "success", "message": message})
 
-# Run the setup function when the server starts
-setup_database()
+# IMPORTANT: The old setup_database() call at the end of the file is now GONE.
