@@ -1,4 +1,4 @@
-# hwid_server.py (Final Version with Robust Startup)
+# hwid_server.py (The Actual Final Version)
 from flask import Flask, request, jsonify
 import sqlite3
 import os
@@ -8,12 +8,13 @@ DB_FILE = os.path.join("/var/data", "hwid_allowlist.db")
 ADMIN_SECRET_KEY = "change-this-to-a-very-long-and-random-password"
 
 def db_connection():
+    # This function simply connects to the database file.
+    # It assumes the /var/data directory already exists.
     return sqlite3.connect(DB_FILE)
 
 def setup_database():
-    # This function now safely creates the directory and the table.
+    # This function creates the table inside the database.
     print("Running initial database setup...")
-    os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
     conn = db_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -26,20 +27,14 @@ def setup_database():
     conn.close()
     print("Database is ready.")
 
-# --- NEW, ROBUST STARTUP LOGIC ---
 @app.before_request
 def before_request_func():
-    # This code runs before EVERY request.
-    # We check if the database has been set up for this server instance yet.
-    # The 'g' object is a special Flask object that lasts for one request.
     from flask import g
     if not getattr(g, '_database_setup', False):
-        # If not set up, run the setup and mark it as done.
         setup_database()
         g._database_setup = True
-# --- END OF NEW LOGIC ---
 
-# --- All your API endpoints (/check, /add, /list, /deactivate) are unchanged ---
+# --- API Endpoints are unchanged ---
 
 @app.route('/check', methods=['POST'])
 def check_hwid():
@@ -87,5 +82,3 @@ def deactivate_hwid():
     message = f"Successfully deactivated HWID: {hwid_to_deactivate}" if cursor.rowcount > 0 else f"Could not find HWID to deactivate: {hwid_to_deactivate}"
     conn.close()
     return jsonify({"status": "success", "message": message})
-
-# IMPORTANT: The old setup_database() call at the end of the file is now GONE.
